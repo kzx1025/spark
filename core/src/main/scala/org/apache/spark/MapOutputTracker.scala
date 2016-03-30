@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.reflect.ClassTag
 
@@ -32,13 +33,15 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
 private[spark] sealed trait MapOutputTrackerMessage
+
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
+
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
-    override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
+                                                     override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends RpcEndpoint with Logging {
   val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
@@ -70,31 +73,31 @@ private[spark] class MapOutputTrackerMasterEndpoint(
 }
 
 /**
- * Class that keeps track of the location of the map output of
- * a stage. This is abstract because different versions of MapOutputTracker
- * (driver and executor) use different HashMap to store its metadata.
- */
+  * Class that keeps track of the location of the map output of
+  * a stage. This is abstract because different versions of MapOutputTracker
+  * (driver and executor) use different HashMap to store its metadata.
+  */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
 
   /** Set to the MapOutputTrackerMasterEndpoint living on the driver. */
   var trackerEndpoint: RpcEndpointRef = _
 
   /**
-   * This HashMap has different behavior for the driver and the executors.
-   *
-   * On the driver, it serves as the source of map outputs recorded from ShuffleMapTasks.
-   * On the executors, it simply serves as a cache, in which a miss triggers a fetch from the
-   * driver's corresponding HashMap.
-   *
-   * Note: because mapStatuses is accessed concurrently, subclasses should make sure it's a
-   * thread-safe map.
-   */
+    * This HashMap has different behavior for the driver and the executors.
+    *
+    * On the driver, it serves as the source of map outputs recorded from ShuffleMapTasks.
+    * On the executors, it simply serves as a cache, in which a miss triggers a fetch from the
+    * driver's corresponding HashMap.
+    *
+    * Note: because mapStatuses is accessed concurrently, subclasses should make sure it's a
+    * thread-safe map.
+    */
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
   /**
-   * Incremented every time a fetch fails so that client nodes know to clear
-   * their cache of map output locations if this happens.
-   */
+    * Incremented every time a fetch fails so that client nodes know to clear
+    * their cache of map output locations if this happens.
+    */
   protected var epoch: Long = 0
   protected val epochLock = new AnyRef
 
@@ -102,9 +105,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   private val fetching = new HashSet[Int]
 
   /**
-   * Send a message to the trackerEndpoint and get its result within a default timeout, or
-   * throw a SparkException if this fails.
-   */
+    * Send a message to the trackerEndpoint and get its result within a default timeout, or
+    * throw a SparkException if this fails.
+    */
   protected def askTracker[T: ClassTag](message: Any): T = {
     try {
       trackerEndpoint.askWithRetry[T](message)
@@ -125,29 +128,29 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-   * Called from executors to get the server URIs and output sizes for each shuffle block that
-   * needs to be read from a given reduce task.
-   *
-   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-   *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
-   *         describing the shuffle blocks that are stored at that block manager.
-   */
+    * Called from executors to get the server URIs and output sizes for each shuffle block that
+    * needs to be read from a given reduce task.
+    *
+    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
+    *         describing the shuffle blocks that are stored at that block manager.
+    */
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
-      : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+  : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1)
   }
 
   /**
-   * Called from executors to get the server URIs and output sizes for each shuffle block that
-   * needs to be read from a given range of map output partitions (startPartition is included but
-   * endPartition is excluded from the range).
-   *
-   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-   *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
-   *         describing the shuffle blocks that are stored at that block manager.
-   */
+    * Called from executors to get the server URIs and output sizes for each shuffle block that
+    * needs to be read from a given range of map output partitions (startPartition is included but
+    * endPartition is excluded from the range).
+    *
+    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
+    *         describing the shuffle blocks that are stored at that block manager.
+    */
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
-      : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+  : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
     // Synchronize on the returned array because, on the driver, it gets mutated in place
@@ -157,8 +160,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-   * Return statistics about all of the outputs for a given shuffle.
-   */
+    * Return statistics about all of the outputs for a given shuffle.
+    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     val statuses = getStatuses(dep.shuffleId)
     // Synchronize on the returned array because, on the driver, it gets mutated in place
@@ -174,11 +177,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-   * Get or fetch the array of MapStatuses for a given shuffle ID. NOTE: clients MUST synchronize
-   * on this array when reading it, because on the driver, we may be changing it in place.
-   *
-   * (It would be nice to remove this restriction in the future.)
-   */
+    * Get or fetch the array of MapStatuses for a given shuffle ID. NOTE: clients MUST synchronize
+    * on this array when reading it, because on the driver, we may be changing it in place.
+    *
+    * (It would be nice to remove this restriction in the future.)
+    */
   private def getStatuses(shuffleId: Int): Array[MapStatus] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
@@ -243,10 +246,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-   * Called from executors to update the epoch number, potentially clearing old outputs
-   * because of a fetch failure. Each executor task calls this with the latest epoch
-   * number on the driver at the time it was created.
-   */
+    * Called from executors to update the epoch number, potentially clearing old outputs
+    * because of a fetch failure. Each executor task calls this with the latest epoch
+    * number on the driver at the time it was created.
+    */
   def updateEpoch(newEpoch: Long) {
     epochLock.synchronized {
       if (newEpoch > epoch) {
@@ -263,12 +266,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /** Stop the tracker. */
-  def stop() { }
+  def stop() {}
 }
 
 /**
- * MapOutputTracker for the driver.
- */
+  * MapOutputTracker for the driver.
+  */
 private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   extends MapOutputTracker(conf) {
 
@@ -294,6 +297,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   // Statuses are dropped only by explicit de-registering.
   protected val mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
   private val cachedSerializedStatuses = new ConcurrentHashMap[Int, Array[Byte]]().asScala
+
+  private val LOG_BASE = 1.1
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
@@ -344,19 +349,19 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   /**
-   * Return the preferred hosts on which to run the given map output partition in a given shuffle,
-   * i.e. the nodes that the most outputs for that partition are on.
-   *
-   * @param dep shuffle dependency object
-   * @param partitionId map output partition that we want to read
-   * @return a sequence of host names
-   */
+    * Return the preferred hosts on which to run the given map output partition in a given shuffle,
+    * i.e. the nodes that the most outputs for that partition are on.
+    *
+    * @param dep         shuffle dependency object
+    * @param partitionId map output partition that we want to read
+    * @return a sequence of host names
+    */
   def getPreferredLocationsForShuffle(dep: ShuffleDependency[_, _, _], partitionId: Int)
-      : Seq[String] = {
+  : Seq[String] = {
     if (shuffleLocalityEnabled && dep.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD &&
-        dep.partitioner.numPartitions < SHUFFLE_PREF_REDUCE_THRESHOLD) {
-      val blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
-        dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
+      dep.partitioner.numPartitions < SHUFFLE_PREF_REDUCE_THRESHOLD) {
+      val blockManagerIds = getLocationsWithOverAllSituation(dep.shuffleId, partitionId,
+        dep.partitioner.numPartitions)
       if (blockManagerIds.nonEmpty) {
         blockManagerIds.get.map(_.host)
       } else {
@@ -368,21 +373,21 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   /**
-   * Return a list of locations that each have fraction of map output greater than the specified
-   * threshold.
-   *
-   * @param shuffleId id of the shuffle
-   * @param reducerId id of the reduce task
-   * @param numReducers total number of reducers in the shuffle
-   * @param fractionThreshold fraction of total map output size that a location must have
-   *                          for it to be considered large.
-   */
+    * Return a list of locations that each have fraction of map output greater than the specified
+    * threshold.
+    *
+    * @param shuffleId         id of the shuffle
+    * @param reducerId         id of the reduce task
+    * @param numReducers       total number of reducers in the shuffle
+    * @param fractionThreshold fraction of total map output size that a location must have
+    *                          for it to be considered large.
+    */
   def getLocationsWithLargestOutputs(
-      shuffleId: Int,
-      reducerId: Int,
-      numReducers: Int,
-      fractionThreshold: Double)
-    : Option[Array[BlockManagerId]] = {
+                                      shuffleId: Int,
+                                      reducerId: Int,
+                                      numReducers: Int,
+                                      fractionThreshold: Double)
+  : Option[Array[BlockManagerId]] = {
 
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses != null) {
@@ -418,6 +423,151 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       }
     }
     None
+  }
+
+
+  /**
+    * Return a list of locations that each have fraction of map output according to load balancing
+    * and achieve  fetching least data.
+    *
+    * @param shuffleId   id of the shuffle
+    * @param reducerId   id of the reduce task
+    * @param numReducers total number of reducers in the shuffle
+    *
+    */
+  def getLocationsWithOverAllSituation(
+                                        shuffleId: Int,
+                                        reducerId: Int,
+                                        numReducers: Int
+                                      )
+  : Option[Array[BlockManagerId]] = {
+    val statuses = mapStatuses.get(shuffleId).orNull
+    assert(statuses != null)
+    val splitsByLocation = new HashMap[BlockManagerId, Array[Long]]
+    var sumOfAllBytes: Long = 0
+    statuses.foreach {
+      status =>
+        if (status == null) {
+          throw new MetadataFetchFailedException(
+            shuffleId, -1, "Missing an output location for shuffle " + shuffleId)
+        } else {
+          val location = status.location
+          if (!splitsByLocation.contains(location)) {
+            splitsByLocation(location) = new Array[Long](numReducers)
+          }
+          var i = 0
+          while (i < numReducers) {
+            val byteSize = status.getSizeForBlock(i)
+            splitsByLocation(location)(i) += byteSize
+            sumOfAllBytes += byteSize
+            i += 1
+          }
+        }
+    }
+    if (splitsByLocation.nonEmpty) {
+      val numOfLocations = splitsByLocation.size
+      val preferredLocationsOfReduces = new Array[BlockManagerId](numReducers)
+      val bytesOfReduces = new Array[Long](numReducers)
+      val blockManagerIdMaps = new HashMap[Int, BlockManagerId]
+      val splitIndexOfLocation = new Array[HashSet[Int]](numOfLocations)
+      var i = 0
+      var j = 0
+      //caclulate the bytesize of each reducer
+      splitsByLocation.toSeq.map(
+        s => {
+          val (blockManagerId, byteSize) = s
+          blockManagerIdMaps(i) = blockManagerId
+          splitIndexOfLocation(i) = new HashSet[Int]
+          j = 0
+          byteSize.map(
+            b => {
+              bytesOfReduces(j) += b
+              j += 1
+            })
+          i += 1
+        })
+
+      val indexOfBytesOfReduces = new HashMap[Int, Long]
+      for ((size, index) <- bytesOfReduces.zipWithIndex) {
+        indexOfBytesOfReduces.getOrElseUpdate(index, size)
+      }
+      val sortedIndexOfBytesOfLocation = indexOfBytesOfReduces.toSeq.sortWith(_._2 > _._2)
+      val splitSumOfByteSizeOfLocation = new Array[Long](numOfLocations)
+
+      //Divide the tasks into n groups according to the number of nodes and data size,
+      // ensuring that the data size for each group is nearly equal to achieve load balancing.
+      for (i <- sortedIndexOfBytesOfLocation.indices) {
+        var minIndex = 0
+        for (j <- 1 until numOfLocations) {
+          if (splitSumOfByteSizeOfLocation(j) < splitSumOfByteSizeOfLocation(minIndex)) {
+            minIndex = j
+          }
+        }
+        val (index, byteSize) = sortedIndexOfBytesOfLocation(i)
+        splitSumOfByteSizeOfLocation(minIndex) += byteSize
+        splitIndexOfLocation(minIndex).add(index)
+      }
+
+      // Determine the amount of fetching data if the tasks of every group are executed on every node.
+      // Thus, a n × n matrix is created.
+      val splitBytesOfLocationsAndGroup = new Array[Array[Long]](numOfLocations)
+      for (i <- splitBytesOfLocationsAndGroup.indices) {
+        splitBytesOfLocationsAndGroup(i) = new Array[Long](numOfLocations)
+      }
+      for (i <- splitIndexOfLocation.indices) {
+        val iter: Iterator[Int] = splitIndexOfLocation(i).iterator
+        while (iter.hasNext) {
+          val index = iter.next()
+          val bytesOfLocations: Seq[(BlockManagerId, Long)] = splitsByLocation.toSeq.map(s => (s._1, s._2(index)))
+          for (j <- bytesOfLocations.indices) {
+            splitBytesOfLocationsAndGroup(i)(j) += bytesOfLocations(j)._2
+          }
+        }
+      }
+      //Choose the largest value in the matrix to identify which group is allocated to which node.
+      // Mark the row and column at which the selected group is located to ensure that the group
+      // is not chosen next time. Goto Step 4 until no group is available.
+      for (i <- 0 until numOfLocations) {
+        var maxCol = 0
+        var maxRow = 0
+        var maxValue = splitBytesOfLocationsAndGroup(maxRow)(maxCol)
+        for (j <- splitBytesOfLocationsAndGroup.indices) {
+          for (k <- splitBytesOfLocationsAndGroup(j).indices) {
+            if (splitBytesOfLocationsAndGroup(j)(k) > maxValue) {
+              maxRow = j
+              maxCol = k
+              maxValue = splitBytesOfLocationsAndGroup(j)(k)
+            }
+          }
+        }
+        val iter: Iterator[Int] = splitIndexOfLocation(maxRow).iterator
+        while (iter.hasNext) {
+          val index = iter.next()
+          preferredLocationsOfReduces(index) = blockManagerIdMaps(maxCol)
+        }
+        for (j <- splitBytesOfLocationsAndGroup.indices) {
+          splitBytesOfLocationsAndGroup(j)(maxCol) = -1
+        }
+        for (k <- splitBytesOfLocationsAndGroup.indices) {
+          splitBytesOfLocationsAndGroup(maxRow)(k) = -1
+        }
+      }
+      Some(preferredLocationsOfReduces)
+    }
+    else
+      None
+  }
+
+
+  /**
+    * Decompress an 8-bit encoded block size, using the reverse operation of compressSize.
+    */
+  def decompressSize(compressedSize: Byte): Long = {
+    if (compressedSize == 0) {
+      0
+    } else {
+      math.pow(LOG_BASE, compressedSize & 0xFF).toLong
+    }
   }
 
   def incrementEpoch() {
@@ -465,9 +615,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 }
 
 /**
- * MapOutputTracker for the executors, which fetches map output information from the driver's
- * MapOutputTrackerMaster.
- */
+  * MapOutputTracker for the executors, which fetches map output information from the driver's
+  * MapOutputTrackerMaster.
+  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
   protected val mapStatuses: Map[Int, Array[MapStatus]] =
     new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
@@ -505,27 +655,27 @@ private[spark] object MapOutputTracker extends Logging {
   }
 
   /**
-   * Given an array of map statuses and a range of map output partitions, returns a sequence that,
-   * for each block manager ID, lists the shuffle block IDs and corresponding shuffle block sizes
-   * stored at that block manager.
-   *
-   * If any of the statuses is null (indicating a missing location due to a failed mapper),
-   * throws a FetchFailedException.
-   *
-   * @param shuffleId Identifier for the shuffle
-   * @param startPartition Start of map output partition ID range (included in range)
-   * @param endPartition End of map output partition ID range (excluded from range)
-   * @param statuses List of map statuses, indexed by map ID.
-   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-   *         and the second item is a sequence of (shuffle block ID, shuffle block size) tuples
-   *         describing the shuffle blocks that are stored at that block manager.
-   */
+    * Given an array of map statuses and a range of map output partitions, returns a sequence that,
+    * for each block manager ID, lists the shuffle block IDs and corresponding shuffle block sizes
+    * stored at that block manager.
+    *
+    * If any of the statuses is null (indicating a missing location due to a failed mapper),
+    * throws a FetchFailedException.
+    *
+    * @param shuffleId      Identifier for the shuffle
+    * @param startPartition Start of map output partition ID range (included in range)
+    * @param endPartition   End of map output partition ID range (excluded from range)
+    * @param statuses       List of map statuses, indexed by map ID.
+    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+    *         and the second item is a sequence of (shuffle block ID, shuffle block size) tuples
+    *         describing the shuffle blocks that are stored at that block manager.
+    */
   private def convertMapStatuses(
-      shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
-      statuses: Array[MapStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
-    assert (statuses != null)
+                                  shuffleId: Int,
+                                  startPartition: Int,
+                                  endPartition: Int,
+                                  statuses: Array[MapStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+    assert(statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
     for ((status, mapId) <- statuses.zipWithIndex) {
       if (status == null) {
