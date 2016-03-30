@@ -264,7 +264,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(5L,2L)))
 
     // as it has 4 out of 7 bytes of output.
-    val topLocs = tracker.getLocationsWithOverAllSituation(10, 0, 2)
+    val topLocs = tracker.getLocationsWithGlobalMode(10, 2)
     assert(topLocs.nonEmpty)
     assert(topLocs.get.size === 2)
     assert(topLocs.get.toSet ===

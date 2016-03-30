@@ -360,7 +360,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   : Seq[String] = {
     if (shuffleLocalityEnabled && dep.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD &&
       dep.partitioner.numPartitions < SHUFFLE_PREF_REDUCE_THRESHOLD) {
-      val blockManagerIds = getLocationsWithOverAllSituation(dep.shuffleId, partitionId,
+      // replace getLocationsWithLargestOutputs with getLocationsWithOverAllSituation
+      val blockManagerIds = getLocationsWithGlobalMode(dep.shuffleId,
         dep.partitioner.numPartitions)
       if (blockManagerIds.nonEmpty) {
         blockManagerIds.get.map(_.host)
@@ -431,13 +432,11 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     * and achieve  fetching least data.
     *
     * @param shuffleId   id of the shuffle
-    * @param reducerId   id of the reduce task
     * @param numReducers total number of reducers in the shuffle
     *
     */
-  def getLocationsWithOverAllSituation(
+  def getLocationsWithGlobalMode(
                                         shuffleId: Int,
-                                        reducerId: Int,
                                         numReducers: Int
                                       )
   : Option[Array[BlockManagerId]] = {
