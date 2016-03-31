@@ -249,26 +249,24 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
-    // Setup 3 map tasks
-    // on hostA with output size 2
-    // on hostA with output size 2
-    // on hostB with output size 3
+    // Setup 4 map tasks
     tracker.registerShuffle(10, 4)
     tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
-      Array(2L,1L)))
-    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("a", "hostA", 1000),
-      Array(2L,3L)))
-    tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("b", "hostB", 1000),
-      Array(3L,1L)))
+      Array(1L,2L,3L,4L,5L,6L,7L)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(2L,8L,2L,5L,2L,2L,9L)))
+    tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("c", "hostC", 1000),
+      Array(3L,2L,7L,4L,2L,6L,1L)))
     tracker.registerMapOutput(10, 3, MapStatus(BlockManagerId("c", "hostC", 1000),
-      Array(5L,2L)))
+      Array(8L,5L,3L,4L,7L,2L,5L)))
 
-    // as it has 4 out of 7 bytes of output.
-    val topLocs = tracker.getLocationsWithGlobalMode(10, 2)
+    val topLocs = tracker.getLocationsWithGlobalMode(10, 7)
     assert(topLocs.nonEmpty)
-    assert(topLocs.get.size === 2)
-    assert(topLocs.get.toSet ===
-      Seq(BlockManagerId("a", "hostA", 1000), BlockManagerId("c", "hostC", 1000)).toSet)
+    assert(topLocs.get.size === 7)
+    assert(topLocs.get ===
+      Array(BlockManagerId("c", "hostC", 1000), BlockManagerId("c", "hostC", 1000), BlockManagerId("b", "hostB", 1000),
+        BlockManagerId("a", "hostA", 1000), BlockManagerId("a", "hostA", 1000), BlockManagerId("c", "hostC", 1000),
+        BlockManagerId("b", "hostB", 1000)))
 
     tracker.stop()
     rpcEnv.shutdown()

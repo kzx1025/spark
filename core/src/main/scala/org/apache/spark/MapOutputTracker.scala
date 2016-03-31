@@ -490,19 +490,19 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       for ((size, index) <- bytesOfReduces.zipWithIndex) {
         indexOfBytesOfReduces.getOrElseUpdate(index, size)
       }
-      val sortedIndexOfBytesOfLocation = indexOfBytesOfReduces.toSeq.sortWith(_._2 > _._2)
+      val sortedIndexOfBytesOfReducer = indexOfBytesOfReduces.toSeq.sortWith(_._2 > _._2)
       val splitSumOfByteSizeOfLocation = new Array[Long](numOfLocations)
 
       //Divide the tasks into n groups according to the number of nodes and data size,
       // ensuring that the data size for each group is nearly equal to achieve load balancing.
-      for (i <- sortedIndexOfBytesOfLocation.indices) {
+      for (i <- sortedIndexOfBytesOfReducer.indices) {
         var minIndex = 0
         for (j <- 1 until numOfLocations) {
           if (splitSumOfByteSizeOfLocation(j) < splitSumOfByteSizeOfLocation(minIndex)) {
             minIndex = j
           }
         }
-        val (index, byteSize) = sortedIndexOfBytesOfLocation(i)
+        val (index, byteSize) = sortedIndexOfBytesOfReducer(i)
         splitSumOfByteSizeOfLocation(minIndex) += byteSize
         splitIndexOfLocation(minIndex).add(index)
       }
